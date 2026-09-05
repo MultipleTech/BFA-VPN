@@ -10,17 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      workflows: write   # <--- Workflow ဖိုင်များကို Commit/Push လုပ်ခွင့်ပေးသည့် ခွင့်ပြုချက်
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract and merge contents to root
+      - name: Extract and merge contents to root (Excluding .github)
         run: |
-          rm -rf NekoBoxForAndroid-main
+          # 1. Zip ဖိုင်ကို temp_dir ထဲ ဖြည်ပါ
           unzip -q "NekoBoxForAndroid-main (1).zip" -d temp_dir
 
+          # 2. Permission Error မတက်စေရန် Zip ထဲပါလာသော .github folder ကို သီးသန့် Skip (ဖျက်ထုတ်) ပါ
+          find temp_dir -type d -name ".github" -exec rm -rf {} +
+
+          # 3. ကျန်သည့် Source Code ဖိုင်အားလုံးကို Root သို့ ရွှေ့ပါ
           INNER_DIR=$(ls temp_dir | head -n 1)
           if [ -d "temp_dir/$INNER_DIR" ]; then
             rsync -a temp_dir/"$INNER_DIR"/ .
@@ -28,6 +31,7 @@ jobs:
             rsync -a temp_dir/ .
           fi
 
+          # 4. temp_dir နှင့် Zip ဖိုင်ကို ရှင်းထုတ်ပါ
           rm -rf temp_dir
           rm -f "NekoBoxForAndroid-main (1).zip"
 
@@ -36,6 +40,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Successfully extracted all files directly to root" || echo "No changes to commit"
+          git commit -m "Successfully extracted files to root (skipped .github)" || echo "No changes to commit"
           git push
           
