@@ -14,26 +14,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract and move contents to root
+      - name: Extract and merge contents to root
         run: |
-          # Repo ထဲတွင် ယခင်ရှိနေသော Folder အဟောင်းကို ရှင်းထုတ်ပါ
+          # 1. ယခင်ကျန်ခဲ့သော Folder အဟောင်းရှိပါက ဖျက်ပါ
           rm -rf NekoBoxForAndroid-main
 
-          # Zip ဖိုင်ကို ယာယီ Folder ထဲ ဖြည်ပါ
+          # 2. Zip ဖိုင်ကို ယာယီ temp_dir ထဲ ဖြည်ပါ
           unzip -q "NekoBoxForAndroid-main (1).zip" -d temp_dir
 
-          # Hidden files များပါ ပါဝင်စေရန် စီမံပါ
-          shopt -s dotglob
-
-          # Inner Folder အထဲမှ ဖိုင်/Folder များအားလုံးကို Root သို့ ရွှေ့ပါ
+          # 3. Inner folder ထဲမှ ဖိုင်များ (Hidden files အပါအဝင်) ကို Root သို့ Merge လုပ်ပါ
           INNER_DIR=$(ls temp_dir | head -n 1)
           if [ -d "temp_dir/$INNER_DIR" ]; then
-            mv temp_dir/$INNER_DIR/* .
+            rsync -a temp_dir/"$INNER_DIR"/ .
           else
-            mv temp_dir/* .
+            rsync -a temp_dir/ .
           fi
 
-          # ယာယီ Folder နှင့် Original Zip ဖိုင်ကို ဖျက်ပါ
+          # 4. temp_dir နှင့် Zip ဖိုင်အဟောင်းကို ရှင်းထုတ်ပါ
           rm -rf temp_dir
           rm -f "NekoBoxForAndroid-main (1).zip"
 
@@ -42,6 +39,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Clean old folder and move zip contents directly to root" || echo "No changes to commit"
+          git commit -m "Successfully extracted all files directly to root" || echo "No changes to commit"
           git push
           
