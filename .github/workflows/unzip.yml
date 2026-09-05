@@ -8,6 +8,8 @@ on:
 jobs:
   unzip:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -15,4 +17,12 @@ jobs:
       - name: Extract zip file to project root
         run: |
           unzip -o "NekoBoxForAndroid-main (1).zip" -d .
+
+      - name: Commit and Push changes back to repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Extract zip file contents to root" || echo "No changes to commit"
+          git push
           
