@@ -42,12 +42,12 @@ jobs:
           echo "Updating nb4a.properties..."
           
           if [ -f "nb4a.properties" ]; then
-            cat > nb4a.properties << EOF
+            cat > nb4a.properties << EOF2
 PACKAGE_NAME=${CUSTOM_PACKAGE_NAME}
 VERSION_NAME=${CUSTOM_VERSION_NAME}
 PRE_VERSION_NAME=pre-${CUSTOM_VERSION_NAME}
 VERSION_CODE=${CUSTOM_VERSION_CODE}
-EOF
+EOF2
             echo "----- New nb4a.properties -----"
             cat nb4a.properties
           else
