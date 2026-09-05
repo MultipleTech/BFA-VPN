@@ -30,30 +30,29 @@ jobs:
           if [ -f "app/src/main/res/values/strings.xml" ]; then
             sed -i "s/<string name=\"app_name\">[^<]*<\/string>/<string name=\"app_name\">${CUSTOM_APP_NAME}<\/string>/" app/src/main/res/values/strings.xml
             echo "Updated strings.xml:"
-            grep "app_name" app/src/main/res/values/strings.xml
+            grep "app_name" app/src/main/res/values/strings.xml || true
           else
             echo "strings.xml not found!"
             exit 1
           fi
 
-      # ---------- 2. Package + Version ပြောင်း (အရေးကြီး) ----------
-      - name: Change Package Name & Version
+      # ---------- 2. Package + Version ပြောင်း ----------
+      - name: Change Package Name and Version
         run: |
           echo "Updating nb4a.properties..."
-          
-          if [ -f "nb4a.properties" ]; then
-            cat > nb4a.properties << EOF2
-PACKAGE_NAME=${CUSTOM_PACKAGE_NAME}
-VERSION_NAME=${CUSTOM_VERSION_NAME}
-PRE_VERSION_NAME=pre-${CUSTOM_VERSION_NAME}
-VERSION_CODE=${CUSTOM_VERSION_CODE}
-EOF2
-            echo "----- New nb4a.properties -----"
-            cat nb4a.properties
-          else
+          if [ ! -f "nb4a.properties" ]; then
             echo "nb4a.properties not found!"
             exit 1
           fi
+
+          # Replace each line safely
+          sed -i "s/^PACKAGE_NAME=.*/PACKAGE_NAME=${CUSTOM_PACKAGE_NAME}/" nb4a.properties
+          sed -i "s/^VERSION_NAME=.*/VERSION_NAME=${CUSTOM_VERSION_NAME}/" nb4a.properties
+          sed -i "s/^PRE_VERSION_NAME=.*/PRE_VERSION_NAME=pre-${CUSTOM_VERSION_NAME}/" nb4a.properties
+          sed -i "s/^VERSION_CODE=.*/VERSION_CODE=${CUSTOM_VERSION_CODE}/" nb4a.properties
+
+          echo "----- New nb4a.properties -----"
+          cat nb4a.properties
 
       - name: Show final values
         run: |
@@ -83,7 +82,7 @@ EOF2
         run: |
           if [ -f "./run" ]; then
             chmod +x ./run
-            ./run lib core || echo "LibCore build skipped/failed"
+            ./run lib core || echo "LibCore build skipped or failed"
           fi
 
       - name: Gradle Build
