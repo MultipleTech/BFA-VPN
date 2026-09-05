@@ -1,0 +1,172 @@
+name: Build BFA VPN APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21'
+  KEYSTORE_FILE: bfa-vpn-release.jks
+  KEY_ALIAS: bfa-vpn
+  APK_NAME: BFA-VPN-1.0.0-release.apk
+
+jobs:
+  build-release:
+    name: Build and Sign BFA VPN
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.1"
+
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "KEYSTORE_PASSWORD secret is missing"
+            exit 1
+          fi
+
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "KEY_PASSWORD secret is missing"
+            exit 1
+          fi
+
+          if [ "${#KEYSTORE_PASSWORD}" -lt 6 ]; then
+            echo "KEYSTORE_PASSWORD must be at least 6 characters"
+            exit 1
+          fi
+
+          if [ "${#KEY_PASSWORD}" -lt 6 ]; then
+            echo "KEY_PASSWORD must be at least 6 characters"
+            exit 1
+          fi
+
+      - name: Generate keystore if it does not exist
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            keytool -genkeypair \
+              -v \
+              -keystore "$KEYSTORE_FILE" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -keypass "$KEY_PASSWORD" \
+              -dname "CN=BFA VPN, OU=Mobile, O=BFA, L=Unknown, ST=Unknown, C=MM"
+          else
+            echo "Using existing keystore file"
+          fi
+
+      - name: Configure Gradle signing
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          cat > local.properties <<EOF
+          sdk.dir=$ANDROID_HOME
+          KEYSTORE_PASS=$KEYSTORE_PASSWORD
+          ALIAS_NAME=$KEY_ALIAS
+          ALIAS_PASS=$KEY_PASSWORD
+          EOF
+
+      - name: Make Gradle executable
+        run: chmod +x ./gradlew
+
+      - name: Build release APK
+        run: ./gradlew --no-daemon --stacktrace assembleOssRelease
+
+      - name: Locate release APK
+        id: locate-apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/oss/release \
+            -maxdepth 1 \
+            -type f \
+            -name '*.apk' \
+            | head -n 1)
+
+          if [ -z "$APK_PATH" ]; then
+            echo "Release APK was not found"
+            exit 1
+          fi
+
+          echo "APK_PATH=$APK_PATH" >> "$GITHUB_ENV"
+          echo "Found APK: $APK_PATH"
+
+      - name: Verify APK package and version
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$APK_PATH" \
+            | grep -E "^(package:|application-label:|launchable-activity:)"
+
+          PACKAGE_LINE=$("$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging "$APK_PATH" \
+            | grep '^package:')
+
+          echo "$PACKAGE_LINE" | grep "name='com.bfa.vpn'"
+          echo "$PACKAGE_LINE" | grep "versionCode='100'"
+          echo "$PACKAGE_LINE" | grep "versionName='1.0.0'"
+
+      - name: Sign APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          mkdir -p signed
+
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" sign \
+            --ks "$KEYSTORE_FILE" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "signed/$APK_NAME" \
+            "$APK_PATH"
+
+      - name: Verify APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose \
+            "signed/$APK_NAME"
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfa-vpn-release-apk
+          path: signed/${{ env.APK_NAME }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload keystore backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfa-vpn-keystore-backup
+          path: ${{ env.KEYSTORE_FILE }}
+          if-no-files-found: error
+          retention-days: 1
+          
